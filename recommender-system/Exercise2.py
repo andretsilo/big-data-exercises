@@ -23,10 +23,8 @@ sc = spark.sparkContext
 rawArtistAlias = sc.textFile("Data/audioscrobbler/artist_alias.txt")
 rawArtistData  = sc.textFile("Data/audioscrobbler/artist_data.txt")
 
-SAMPLE = False  # full dataset on HPC
 rawUserArtistData = sc.textFile("Data/audioscrobbler/user_artist_data.txt")
-if SAMPLE:
-    rawUserArtistData = rawUserArtistData.sample(False, 0.05, seed=42)
+rawUserArtistData = rawUserArtistData.sample(False, 0.3, seed=42)
 
 artistAlias = (
     rawArtistAlias
@@ -110,16 +108,14 @@ def compute_auc(model, eval_rdd, actual_artists_rdd):
     )
     return BinaryClassificationMetrics(pal).areaUnderROC
 
-# 5-fold CV: materialize trainData to Python list to avoid RDD lineage buildup
-print('\nCollecting trainData for CV folds...')
-trainList = trainData.collect()
-random.Random(42).shuffle(trainList)
-n = len(trainList)
-K = 5  # 5-fold CV
+# 5-fold CV using RDD-native splitting (avoids collecting to Python)
+print('\nPreparing CV folds...')
+K = 5
+indexedTrain = trainData.zipWithIndex().map(lambda x: (x[1] % K, x[0])).cache()
 folds = [
     (
-        sc.parallelize([trainList[j] for j in range(n) if j % K != i]),
-        sc.parallelize([trainList[j] for j in range(n) if j % K == i])
+        indexedTrain.filter(lambda x, i=i: x[0] != i).map(lambda x: x[1]),
+        indexedTrain.filter(lambda x, i=i: x[0] == i).map(lambda x: x[1])
     )
     for i in range(K)
 ]
@@ -152,8 +148,12 @@ for rank in ranks:
             avg_auc = sum(fold_aucs) / len(fold_aucs)
             evaluations.append(((rank, lam, alpha), avg_auc))
             print(f'  rank={rank}, lambda={lam}, alpha={alpha} -> CV AUC={avg_auc:.4f}')
+            # Save progress after each combination
+            with open('cv_results.txt', 'a') as f:
+                f.write(f'rank={rank}, lambda={lam}, alpha={alpha}, CV AUC={avg_auc:.4f}\n')
 
 evaluations.sort(key=lambda x: x[1], reverse=True)
+indexedTrain.unpersist()
 print('\nTop 5 hyperparameter combinations:')
 for params, auc in evaluations[:5]:
     print(f'  rank={params[0]}, lambda={params[1]}, alpha={params[2]} -> AUC={auc:.4f}')
@@ -217,3 +217,32 @@ predictionsAndLabelsBaseline = (
 
 auc_baseline = BinaryClassificationMetrics(predictionsAndLabelsBaseline).areaUnderROC
 print(f'AUC (Most Popular baseline): {auc_baseline:.4f}')
+
+# Task 3: Add a new user and get recommendations
+# New user ID — must not exist in the dataset
+new_user_id = 9999999
+
+# Artist IDs chosen from audioscrobbler dataset (rap artists)
+new_user_ratings = [
+    Rating(new_user_id, 829,     1000),  # Nas
+    Rating(new_user_id, 930,     1000),  # Eminem
+    Rating(new_user_id, 1811,    1000),  # Dr. Dre
+    Rating(new_user_id, 1001819, 1000),  # 2Pac
+    Rating(new_user_id, 1007435, 1000),  # Big L
+    Rating(new_user_id, 1004028, 1000),  # Notorious B.I.G.
+    Rating(new_user_id, 250,     1000),  # Outkast
+    Rating(new_user_id, 1004496, 1000),  # Ice Cube
+]
+
+# Combine new user ratings with full trainData and retrain
+augmentedTrainData = trainData.union(sc.parallelize(new_user_ratings)).cache()
+new_model = ALS.trainImplicit(augmentedTrainData, rank=best_rank, iterations=5, lambda_=best_lambda, alpha=best_alpha)
+
+# Get top-25 recommendations for the new user
+top25 = new_model.recommendProducts(new_user_id, 25)
+
+# Look up artist names
+artistMap = dict(artistByID.collect())
+print(f'\nTop-25 recommended artists for new user {new_user_id}:')
+for i, r in enumerate(top25, 1):
+    print(f'  {i:2}. {artistMap.get(r.product, f"Unknown({r.product})")}')

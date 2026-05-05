@@ -3,7 +3,7 @@
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
-#SBATCH --time=00:60:00
+#SBATCH --time=03:00:00
 #SBATCH -p batch
 #SBATCH -o %x-%j.log
 
