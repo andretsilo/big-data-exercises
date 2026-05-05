@@ -17,19 +17,13 @@ logging.getLogger("py4j").setLevel(logging.ERROR)
 
 spark = SparkSession.builder \
     .appName("Exercise2") \
-    .config("spark.driver.memory", "3g") \
-    .config("spark.executor.memory", "3g") \
-    .config("spark.driver.maxResultSize", "2g") \
-    .config("spark.master", "local[2]") \
-    .config("spark.pyspark.python", sys.executable) \
-    .config("spark.pyspark.driver.python", sys.executable) \
     .getOrCreate()
 sc = spark.sparkContext
 
 rawArtistAlias = sc.textFile("Data/audioscrobbler/artist_alias.txt")
 rawArtistData  = sc.textFile("Data/audioscrobbler/artist_data.txt")
 
-SAMPLE = True  # set to False for full run
+SAMPLE = False  # full dataset on HPC
 rawUserArtistData = sc.textFile("Data/audioscrobbler/user_artist_data.txt")
 if SAMPLE:
     rawUserArtistData = rawUserArtistData.sample(False, 0.05, seed=42)
@@ -121,7 +115,7 @@ print('\nCollecting trainData for CV folds...')
 trainList = trainData.collect()
 random.Random(42).shuffle(trainList)
 n = len(trainList)
-K = 2  # reduced from 5 to save memory
+K = 5  # 5-fold CV
 folds = [
     (
         sc.parallelize([trainList[j] for j in range(n) if j % K != i]),
@@ -151,7 +145,7 @@ for rank in ranks:
                     .groupByKey()
                     .mapValues(set)
                 )
-                m = ALS.trainImplicit(train_fold_c, rank=rank, iterations=2, lambda_=lam, alpha=alpha)
+                m = ALS.trainImplicit(train_fold_c, rank=rank, iterations=5, lambda_=lam, alpha=alpha)
                 fold_aucs.append(compute_auc(m, val_fold_c, val_actual))
                 train_fold_c.unpersist()
                 val_fold_c.unpersist()
