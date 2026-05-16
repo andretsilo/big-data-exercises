@@ -1,9 +1,9 @@
 #!/bin/bash -l
 #SBATCH -J bda-job
-#SBATCH --nodes=2
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=12
-#SBATCH --time=03:00:00
+#SBATCH --cpus-per-task=24
+#SBATCH --time=02:00:00
 #SBATCH -p batch
 #SBATCH -o %x-%j.log
 

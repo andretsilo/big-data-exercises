@@ -20,10 +20,10 @@ spark = SparkSession.builder \
     .getOrCreate()
 sc = spark.sparkContext
 
-rawArtistAlias = sc.textFile("Data/audioscrobbler/artist_alias.txt")
-rawArtistData  = sc.textFile("Data/audioscrobbler/artist_data.txt")
+rawArtistAlias = sc.textFile("/mnt/aiongpfs/users/atsilogiannis/recommender-system/Data/audioscrobbler/artist_alias.txt")
+rawArtistData  = sc.textFile("/mnt/aiongpfs/users/atsilogiannis/recommender-system/Data/audioscrobbler/artist_data.txt")
 
-rawUserArtistData = sc.textFile("Data/audioscrobbler/user_artist_data.txt")
+rawUserArtistData = sc.textFile("/mnt/aiongpfs/users/atsilogiannis/recommender-system/Data/audioscrobbler/user_artist_data.txt")
 rawUserArtistData = rawUserArtistData.sample(False, 0.3, seed=42)
 
 artistAlias = (
@@ -61,7 +61,7 @@ qualifiedUsers = set(
     .distinct()
     .map(lambda x: (x[0], 1))
     .reduceByKey(lambda a, b: a + b)
-    .filter(lambda x: x[1] >= (100 if not SAMPLE else 10))
+    .filter(lambda x: x[1] >= 100)
     .map(lambda x: x[0])
     .collect()
 )
@@ -121,9 +121,9 @@ folds = [
 ]
 
 # Hyperparameter grid search
-ranks   = [10, 25, 50]
+ranks   = [25, 50]
 lambdas = [1.0, 0.1, 0.01]
-alphas  = [1.0, 10.0, 100.0]
+alphas  = [1.0]
 
 print('\nStarting hyperparameter grid search with 5-fold CV...')
 evaluations = []
